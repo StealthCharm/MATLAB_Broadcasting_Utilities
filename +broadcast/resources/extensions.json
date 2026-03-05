@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "mw": {
+    "snippets": {
+      "definitions": {
+        "BroadcastBinary_3412FD2E": {
+          "body": [
+            "% Generate the indexing map",
+            "[map, sz, arg_sz] = broadcast.map(${1:A}, ${2:B});",
+            "",
+            "% Preallocate the output",
+            "${3:C} = createArray(sz, Like=${1:A});",
+            "",
+            "% Compute each element of the output",
+            "for n = 1:width(map)",
+            "    C(n) = ${4:fcn}(${1:A}(map(1, n)), ${1:B}(map(2, n)));",
+            "end",
+            "",
+            "$0"
+          ],
+          "description": "A snippet for binary argument broadcasting patterns.",
+          "prefix": [
+            ""
+          ],
+          "text": "Broadcast_Binary"
+        },
+        "BroadcastVariadic_9E97E5B7": {
+          "body": [
+            "% Generate the index map",
+            "[${1:A}, map, sz] = broadcast.flatmap(${1:A});",
+            "",
+            "% Preallocate the output",
+            "output = createArray(sz, Like=${1:A});",
+            "",
+            "% Compute each element of the output",
+            "for n = 1:width(map)",
+            "    output(n) = ${2:fcn}(${1:A}{map(:, n)});",
+            "end",
+            "",
+            "$0"
+          ],
+          "description": "True Variadic Broadcasting",
+          "prefix": [
+            ""
+          ],
+          "text": "Broadcast_Variadic"
+        }
+      }
+    }
+  }
+}
