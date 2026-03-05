@@ -73,6 +73,14 @@ isequal(A, E) %[output:1bb8072a]
 %[text] This enables us to ignore all the complexity of permutations and instead follow a simple pattern for all dimensional operations.
 %[text] ### The Permutation Workflow
 %[text] Now any dimensional operation comes down to a single pattern:
+% Normally I have these on my path; ie: not within the package, but for the sake of sharing we'll bundle them since
+% they're both useful in eliminating overhead and writing generalized coded that follows the dimensional operations and
+% broadcasting behavior found in most built-in functions. If you'd like you can remove these from the package, leave them in the package but remove
+% the ND suffix, or whatever else you may want... I'm not your dad.
+import broadcast.permuteND;
+import broadcast.ipermuteND;
+import broadcast.permuteDims;
+
 % Example of our interface as a function author
 [A, dim] = example_inputs() %[output:78b14a51] %[output:3f60c1bd]
 
