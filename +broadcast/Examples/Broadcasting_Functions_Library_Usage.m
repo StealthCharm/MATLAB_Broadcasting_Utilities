@@ -21,17 +21,17 @@ fcn = @plus;
 [map, sz, arg_sz] = broadcast.map(A, B);
 
 % Preallocate the output
-output = createArray(sz, output_class);
+C = createArray(sz, output_class);
 
 % Iterate through calls for each element of the output
 for n = 1:width(map)
-    output(n) = fcn(A(map(1, n)), B(map(2, n)));
+    C(n) = fcn(A(map(1, n)), B(map(2, n)));
 end
 
 % As expected this method of implementation works!
-isequal(A + B, output) %[output:7db720c9]
+isequal(A + B, C) %[output:7db720c9]
 %[text] ## Pattern 2: True Variadic Function Broadcasting
-%[text] Although less common there are times where the function call that we are broadcasting is variadic. In this case it is necessary for us to repackage the arguments to maintain a generalized working pattern, broadcast.flatmap() does this by modifying the arguments such that they reside in a flat heterogeneous array and the map is offset to account for this; conceptually one could picture this as a virtual, jagged dimension representing the argument count.
+%[text] Although less common there are times where the function call that we are broadcasting is variadic. In this case it is necessary for us to repackage the arguments to maintain a generalized working pattern, `broadcast.flatmap()` does this by modifying the arguments such that they reside in a flat heterogeneous array and the map is offset to account for this; conceptually one could picture this as a virtual, jagged dimension representing the argument count.
 % Example data
 [A, B, C] = example_arguments();
 args = {A, B, C};
@@ -46,15 +46,15 @@ fcn = @add;
 [args, map, sz, arg_sz] = broadcast.flatmap(args{:});
 
 % Preallocate the output
-output = createArray(sz, output_class);
+C = createArray(sz, output_class);
 
 % Iterate through calls for each element of the output
 for n = 1:width(map)
-    output(n) = fcn(args{map(:, n)});
+    C(n) = fcn(args{map(:, n)});
 end
 
 % As expected this method of implementation works!
-isequal(A + B + C, output) %[output:134050fd]
+isequal(A + B + C, C) %[output:134050fd]
 %%
 %[text] # Additional Features
 %[text] For convenience some other functions have been included:
@@ -72,42 +72,42 @@ isequal(A + B + C, output) %[output:134050fd]
 %[text] This gives use a convenient way to validate broadcast compatibility for arguments, and generating the output size of the result. To do this lets assume we have some arguments:
 % Allow example switching
 use_valid_arguments = false; %[control:checkbox:9ca5]{"position":[23,28]}
-[A, B, output] = example_arguments(use_valid_arguments) %[output:590b7d7c] %[output:87fe0514] %[output:6095e61f]
+[A, B, C] = example_arguments(use_valid_arguments) %[output:590b7d7c] %[output:87fe0514] %[output:6095e61f]
 %[text] ### `element_size()`
-%[text] To gather the sizes and compare them we can align each arguments `size()` results in a row. This means that the size will be NxM where N is the number of operands and M is the dimension count of the highest dimension argument. This is difficult to do efficiently since we must find the size of each argument, but also ensure to pad the length of the size results to the highest dimension; in the example arguments this is an issue since `C` is three-dimensional. To normalize this pattern the private function `element_size()` was created, it takes in a cell array of the arguments and returns the flattened size matrix. Note that significant performance test was conducted on the various methods of retrieving the sizes, of those methods, that used in `element_size()` consistently out performed all other methods.
+%[text] To gather the sizes and compare them we can align each arguments `size()` results in a row. This means that the size will be `NxM` where `N` is the number of operands and `M` is the dimension count of the highest dimension argument. This is difficult to do efficiently since we must find the size of each argument, but also ensure to pad the length of the size results to the highest dimension; in the example arguments this is an issue since `C` is three-dimensional. To normalize this pattern the private function `element_size()` was created, it takes in a cell array of the arguments and returns the flattened size matrix. Note that significant performance testing was conducted on the various methods of retrieving the sizes, of those methods, that used in `element_size()` consistently out performed all other methods.
 % Call the internal optimized size method to gather all argument sizes
-arg_sizes = element_size({A, B, output}) %[output:0c2b27b3]
+arg_sizes = element_size({A, B, C}) %[output:0c2b27b3]
 %[text] ### `broadcast.isValidSize()`
 %[text] Now we will check the compatibility of the arguments for broadcasting. This is done in  `broadcast.isValidSize()` which expects a matrix in the previously mentioned format. The implementation of the check in that function has been optimized internally to account for the overhead of writes vs that of inline masking, but conceptually it is equivalent to the following:
 %[text] - First we find the max length for each dimension (and each column is a dimension so we take the max along dim=1)
-%[text] - This will be the output size of the broadcasted arguments if their compatible for broadcasting, we do not however know if they're compatible.
+%[text] - This will be the output size of the broadcasted arguments if they're compatible for broadcasting, we do not however know if they're compatible.
 %[text] - To check compatibility we will do a broadcasted comparison of the `arg_sizes` array to both 1 and the output size we found.
-%[text] - This gives use a logical map of valid dimensions for broadcasting, performing a all reduction along the columns gives us the results for each dimensions validity given the input arguments, if specificity about which dimensions are not needed a complete reduction can be produced. \
+%[text] - This gives use a logical map of valid dimensions for broadcasting, performing an `all()` reduction along the columns gives us the results for each dimensions validity given the input arguments, if specificity about which dimensions are not needed a complete reduction can be produced. \
 % Gives us the output size, which is also needed for check
 output_size = max(arg_sizes, [], 1) %[output:16878b6d]
 
 % Compare the length of every argument's dimensions 
-is_valid = arg_sizes == output_size | arg_sizes == 1 %[output:1bd3239c]
+is_valid = arg_sizes == output_size | arg_sizes == 1 %[output:8e8aca31]
 
 % Reduce to check which dimensions conform to broadcasting semantics
-is_valid_dimension = all(is_valid, 1) %[output:9b516cd9]
+is_valid_dimension = all(is_valid, 1) %[output:660767f3]
 
 % If we only care for general compatibility check we use complete reduction
-are_broadcast_compatible = all(is_valid, "all") %[output:2ba0e7ee]
+are_broadcast_compatible = all(is_valid, "all") %[output:65e283c8]
 %[text] Since the arguments are valid, this means broadcasting can be performed!
-output = attempt(@() A + B + output) %[output:5376d31c]
-%[text] If you would like to see this logic follow out with an invalid C argument, set the `use_valid_arguments` value to false, in live scripts this should be a check box, otherwise you can modify the value to false manually.
+output = attempt(@() A + B + C) %[output:6002b932]
+%[text] If you would like to see this logic follow out with an invalid `C` argument, set the `use_valid_arguments` value to false, in live scripts this should be a check box, otherwise you can modify the value to false manually.
 %[text] ### broadcast.size()
 %[text] To encapsulate the workflow previously discussed, this namespace has `[sz, sizes] = broadcast.size().` This function returns the broadcasted output size along with the size matrix produced from `element_size()` (to avoid recalling it if the full size array is needed by `broadcast.size()`'s caller).
 %[text] In addition it also has a name-value options called `Validate`. This options allows the function to act as a validator when incompatible arguments are used; when called from within a function it will throw an error, as the calling function, using the same error that would be thrown by MATLAB when broadcasting incompatible arguments are used. When the `Validate` option is set to false, instead of producing an error the outputs are returned but the incompatible dimensions in the `output_size` are set to NaN, this acts as the incompatibility sentinel, allowing easy detection with `ismissing()`/`isnan().`
 % Using false we can gather the results and optionally perform more advanced handling/errors
-[output_size, arg_sizes] = broadcast.size(A, B, output, Validate=false)  %[output:4dfd41c8] %[output:425a168d]
+[output_size, arg_sizes] = broadcast.size(A, B, C, Validate=false)  %[output:1bd3239c] %[output:9b516cd9]
 
 % Or when using as a compositional tool, we have it throw an error as its caller, when called from a function
-[output_size, arg_sizes] = attempt(@() broadcast.size(A, B, output)) %[output:9c0da3b5] %[output:59e009d2]
+[output_size, arg_sizes] = attempt(@() broadcast.size(A, B, C)) %[output:1a1d3834] %[output:2502b7d2]
 %%
 %[text] ## Enabling Broadcasting
-%[text] Now that we understand how to check the compatibility of arguments for broadcasting, we can start to work towards an algorithm that enables us, as function authors, to implement broadcasting ourselves, in a consistent and low-overhead way. To do this we need to consider how code execution is working; MATLAB is a COW (copy on write) language this means that when you make a copy of a variable it behaves like a reference value until the copy or original are modified, once a modification occurs the modified version is copied and altered. MATLAB however does not employ a similar pattern for `repelem()` or `repmat()` which are used to replicate arrays. Another useful quirk about MATLAB is that, if an input argument to a function is used as its output, and that same pattern of A = foo(A) is used by the caller, MATLAB will overwrite the variable meaning we can avoid unnecessary allocations by modifying a variable instead of copying it.
+%[text] Now that we understand how to check the compatibility of arguments for broadcasting, we can start to work towards an algorithm that enables us, as function authors, to implement broadcasting ourselves, in a consistent and low-overhead way. To do this we need to consider how code execution is working; MATLAB is a COW (copy on write) language this means that when you make a copy of a variable it behaves like a reference value until the copy or original are modified, once a modification occurs the modified version is copied and altered. MATLAB however does not employ a similar pattern for `repelem()` or `repmat()` which are used to replicate arrays. Another useful quirk about MATLAB is that, if an input argument to a function is used as its output, and that same pattern of `A = foo(A)` is used by the caller, MATLAB will overwrite the variable meaning we can avoid unnecessary allocations by modifying a variable instead of copying it.
 %[text] As such there are instances where, even when a function supports *"partial"* broadcasting for arguments of exactly the same size (but not *"full"* broadcasting semantics) where it is beneficial for us to re-implement the function. This may involve sliced processing or referencing elements of the inputs in simple and fast for-loops rather than expanding the inputs which duplicates their elements (this is because allocations are expensive and there unnecessary since we are not modifying the data). 
 %[text] ### `broadcast.map()`
 %[text] This makes it beneficial for us to generate indexing maps. These maps will contain the index into a given argument, for each argument, for every element of the output. Again it is best to keep this in a standard, flat array for performance. As a convention we will mirror the previously discussed `element_size()` semantic, that is to say we well generate a NxM array where N is the number of arguments and M is the number of elements in the output. 
@@ -118,48 +118,48 @@ output = attempt(@() A + B + output) %[output:5376d31c]
 %[text] Regarding the map generator, the modulo math involved can get expensive to use writing code in MATLAB, but importantly, since we are using numeric values to index, and the base numeric classes implement highly-optimized vectorization using BLAS backed calls, we can use use MATLABs implicit broadcasting to build our maps.
 %[text] If we know the output size, given by `broadcast.size()`, then we can just generate numeric arrays the same size as each argument, where the element value is equivalent to its linear index, add them to a zero array the same size of the output, and flatten the results. Since the implementation details and concept here are both simple we will avoid covering them, the explanation in the function file is available if desired. 
 % These function require valid arguments so we'll regenerate them
-[A, B, output] = example_arguments(true);
+[A, B, C] = example_arguments(true);
 
 % A map is generated were each row is an input arguments indices
-[map, output_size, arg_sizes] = broadcast.map(A, B, output) %[output:27dfbec3] %[output:203edc6b] %[output:610c21f0]
+[map, output_size, arg_sizes] = broadcast.map(A, B, C) %[output:182c3b46] %[output:82d4a867] %[output:7d2a4821]
 %[text] Note that we have a map of size 3x15. Our output size is 3x5 (for 15 total elements) and are argument count is 3. This enables a simple and consistent indexing pattern in for loops, the returned output size gives us the information we need to preallocate outputs when overwriting them is not desirable/possible:
 % First we preallocate
-output = zeros(output_size) %[output:6cc1e076]
+output = zeros(output_size) %[output:48381ff9]
 
 % The width of our map corresponds to every element in the output
 for n = 1:width(map)
     % Now we index using Argument(map(argN, n)) to gather the correct element
     output(n) = ...
-        A(map(1, n)) + ... % First argument is argn = 1
-        B(map(2, n)) + ... % Second argument is argn = 2
-        output(map(3, n));      % Third argument is argN = 3
+        A(map(1, n)) + ... % First argument is argN = 1
+        B(map(2, n)) + ... % Second argument is argN = 2
+        C(map(3, n));      % Third argument is argN = 3
 end
 
 % Notice the equality
-isequal(output, A+B+output) %[output:4fb9761b]
+isequal(output, A+B+C) %[output:7a820127]
 %[text] This pattern is convenient when, as a function author, we know the argument count we will broadcast, and don't want to pay the overhead for true variadic compatibility. Notice though how we do need to reference each argument by name, IE our code cannot adapt to repeating, or variadic arguments; in instances where we do need true variadic compatibility we can use `broadcast.flatmap()`.
 %[text] ## Cell Semantics Review
 %[text]  This function acts to allow repeated arguments by abstracting the separate arguments as offsets in a combined heterogeneous array. Consider the previous example but instead of named arguments we have a cell array (the structure returned from repeating arguments from a function perspective). We can mimic this without the complexity of functions by simple cell wrapping the previous arguments:
-args = {A, B, output} %[output:8d051d14]
+args = {A, B, C} %[output:2d7c06ae]
 %[text] For those less familiar with MATLAB cell semantics, cell arrays allow storing heterogeneous data, when indexing normally (with parenthesis) we get out a sub-array that is itself a cell array. MATLAB however has a notion of comma separated lists (CSL) when you use curly braces to index you get out the unwrapped data in the respective cell.
 % Using parenthesis to get a sub-array
-ex = args(1:2) %[output:5a2b9911]
+ex = args(1:2) %[output:64183464]
 
 % Using braces to get separate outputs!
-[ex1, ex2] = args{1:2} %[output:5fdcb08f] %[output:69e9f073]
+[a, b] = args{1:2} %[output:2866de2b] %[output:065944be]
 %[text] These separate values also have implications for functions; when using brace indexing inside of a function call, the effect is that each output is a separate input to the function. This enables us to generalize variadic function calls. that means that we can call the plus operator with `A + B`, `plus(A, B)`, or `plus(args{1:2})` (since A and B are the first and second elements in `args`). Again notice the equality:
-isequal(A + B, plus(args{1:2})) %[output:35f543c0]
+isequal(A + B, plus(args{1:2})) %[output:44f5c245]
 %[text] ### broadcast.flatmap()
-%[text] So with the MATLAB cell semantics covered, lets look at the capabilities this gives us. First we want to generate a broadcasting map, then we we conceptualize each argument as a jagged dimensional offset and modify the map, then we will condense all arguments into a single cell array, but in addition we will flatten each element of the arguments so that the total length of the flattened output is equivalent to the summation of each arguments element count:
+%[text] So with the MATLAB cell semantics covered, lets look at the capabilities this gives us. First we want to generate a broadcasting map, then we conceptualize each argument as a jagged dimensional offset and modify the map, then we will condense all arguments into a single cell array, but in addition we will flatten each element of the arguments so that the total length of the flattened output is equivalent to the summation of each arguments element count:
 % For later comparison
-cmp_args = {A, B, output};
-args = cmp_args %[output:993ff024]
+cmp_args = {A, B, C};
+args = cmp_args %[output:69f7740b]
 %[text] Note that the repeating arguments of broadcast.map and broadcast.size were made with variadic arguments in mind. All we do is use {:} to output all arguments as separate inputs.
-[map, output_size, arg_sizes] = broadcast.map(args{:}) %[output:1d167eab] %[output:6e567960] %[output:448a089c]
+[map, output_size, arg_sizes] = broadcast.map(args{:}) %[output:9f68705c] %[output:2e1af278] %[output:4131f9c9]
 %[text] Since we have the `arg_sizes`, and since its oriented identically to the map, to generate the modified offsets all we do is take the product of the `arg_size` across the columns (in dimension 2), this gives us the element counts. Then we take the `cumsum()` to generate the offsets cumulatively; finally we add the offsets from `(1:end-1, :)` to `(2:end, :)` of the map (since the first argument doesn't require offsets).
-argument_element_counts = prod(arg_sizes, 2) %[output:433af56c]
-cumulative_offset = cumsum(argument_element_counts, 1) %[output:2f472a92]
-map(2:end, :) = map(2:end, :) + cumulative_offset(1:2) %[output:7beb085e]
+argument_element_counts = prod(arg_sizes, 2) %[output:58489d51]
+cumulative_offset = cumsum(argument_element_counts, 1) %[output:90de6eb6]
+map(2:end, :) = map(2:end, :) + cumulative_offset(1:(end-1)) %[output:842a0607]
 %[text] Finally the last requirement is that we flatten all elements into a single array, since we don't care about their shape we will row-ize them as we cell wrap each element, this is because vertical and horizontal concatenations are cheap and provide a performance conscious way to flatten arguments while respecting the original ordering relative to each arguments placement.
 for n = 1:numel(args)
     % num2cell() just turns an array into a cell array with each
@@ -168,10 +168,10 @@ for n = 1:numel(args)
 end
 
 % Finally we flatten all arguments
-args = [args{:}] %[output:7ffcc93a]
+args = [args{:}] %[output:7cc34f7e]
 %[text] Now, instead of having to reference each argument specifically, the elements of all arguments are in a cell array and our map has be offset to account for this. This means that we can use each column of the map, and curly brace indexing, to generate repeating arguments for our the function we'd like to call; this enables a generalized processing pattern for truly variadic functions. This is the conceptual functionality of `broadcast.map().`
 % We have some arguments from our repeating arguments block
-args = {A, B, output};
+args = {A, B, C};
 
 % We prepare them for variadic broadcasting
 [args, map, output_size] = broadcast.flatmap(args{:});
@@ -187,13 +187,14 @@ for n = 1:width(map)
 end
 
 % Again notice the equality
-isequal(A + B + output, output) %[output:905e249b]
+isequal(A + B + C, output) %[output:80f9572a]
 %[text] It is worth noting that for both `broadcast.map()` and `broadcast.flatmap()` the input arguments ***must*** be broadcast compatible, IE their usage of Validate is true and is not capable of being modified in their respective APIs.
 %[text] # Utility Functions
 %[text] These are warning fix suppression codes, since the purpose is demonstration, certain patterns are used that would be atypical for normal code:
 %#ok<*ASGLU>
 %#ok<*UNRCH>
 %#ok<*DEFNU>
+%#ok<*NASGU>
 %[text] This function returns example outputs that are either broadcast compatible depending on the input state.
 function [A, B, C] = example_arguments(broadcast_compatible)
     arguments
@@ -257,7 +258,7 @@ end
 %   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"ans","value":"   1"}}
 %---
 %[output:134050fd]
-%   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"ans","value":"   1"}}
+%   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"ans","value":"   0"}}
 %---
 %[output:590b7d7c]
 %   data: {"dataType":"matrix","outputData":{"columns":5,"name":"A","rows":3,"type":"double","value":[["1","4","7","10","13"],["2","5","8","11","14"],["3","6","9","12","15"]]}}
@@ -274,84 +275,84 @@ end
 %[output:16878b6d]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"name":"output_size","rows":1,"type":"double","value":[["3","5"]]}}
 %---
-%[output:1bd3239c]
+%[output:8e8aca31]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"header":"3×2 logical array","name":"is_valid","rows":3,"type":"logical","value":[["1","1"],["1","1"],["1","0"]]}}
 %---
-%[output:9b516cd9]
+%[output:660767f3]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"header":"1×2 logical array","name":"is_valid_dimension","rows":1,"type":"logical","value":[["1","0"]]}}
 %---
-%[output:2ba0e7ee]
+%[output:65e283c8]
 %   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"are_broadcast_compatible","value":"   0"}}
 %---
-%[output:5376d31c]
+%[output:6002b932]
 %   data: {"dataType":"textualVariable","outputData":{"name":"output","value":"  <a href=\"matlab:helpPopup('MException')\" style=\"font-weight:bold\">MException<\/a> with properties:\n\n    identifier: 'MATLAB:sizeDimensionsMustMatch'\n       message: 'Arrays have incompatible sizes for this operation.'\n         cause: {}\n         stack: [3×1 struct]\n    Correction: []"}}
 %---
-%[output:4dfd41c8]
+%[output:1bd3239c]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"name":"output_size","rows":1,"type":"double","value":[["3","5"]]}}
 %---
-%[output:425a168d]
+%[output:9b516cd9]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"name":"arg_sizes","rows":3,"type":"double","value":[["3","5"],["3","1"],["1","3"]]}}
 %---
-%[output:9c0da3b5]
+%[output:1a1d3834]
 %   data: {"dataType":"textualVariable","outputData":{"name":"output_size","value":"  <a href=\"matlab:helpPopup('MException')\" style=\"font-weight:bold\">MException<\/a> with properties:\n\n    identifier: 'MATLAB:sizeDimensionsMustMatch'\n       message: 'Arrays have incompatible sizes for this operation.'\n         cause: {}\n         stack: [3×1 struct]\n    Correction: []"}}
 %---
-%[output:59e009d2]
+%[output:2502b7d2]
 %   data: {"dataType":"text","outputData":{"text":"arg_sizes =\n     []\n","truncated":false}}
 %---
-%[output:27dfbec3]
+%[output:182c3b46]
 %   data: {"dataType":"matrix","outputData":{"columns":15,"name":"map","rows":3,"type":"double","value":[["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"],["1","2","3","1","2","3","1","2","3","1","2","3","1","2","3"],["1","1","1","2","2","2","3","3","3","4","4","4","5","5","5"]]}}
 %---
-%[output:203edc6b]
+%[output:82d4a867]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"name":"output_size","rows":1,"type":"double","value":[["3","5"]]}}
 %---
-%[output:610c21f0]
+%[output:7d2a4821]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"name":"arg_sizes","rows":3,"type":"double","value":[["3","5"],["3","1"],["1","5"]]}}
 %---
-%[output:6cc1e076]
+%[output:48381ff9]
 %   data: {"dataType":"matrix","outputData":{"columns":5,"name":"output","rows":3,"type":"double","value":[["0","0","0","0","0"],["0","0","0","0","0"],["0","0","0","0","0"]]}}
 %---
-%[output:4fb9761b]
+%[output:7a820127]
 %   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"ans","value":"   1"}}
 %---
-%[output:8d051d14]
+%[output:2d7c06ae]
 %   data: {"dataType":"tabular","outputData":{"columns":3,"header":"1×3 cell array","name":"args","rows":1,"type":"cell","value":[["3×5 double","[1;2;3]","[1,2,3,4,5]"]]}}
 %---
-%[output:5a2b9911]
+%[output:64183464]
 %   data: {"dataType":"tabular","outputData":{"columns":2,"header":"1×2 cell array","name":"ex","rows":1,"type":"cell","value":[["3×5 double","[1;2;3]"]]}}
 %---
-%[output:5fdcb08f]
-%   data: {"dataType":"matrix","outputData":{"columns":5,"name":"ex1","rows":3,"type":"double","value":[["1","4","7","10","13"],["2","5","8","11","14"],["3","6","9","12","15"]]}}
+%[output:2866de2b]
+%   data: {"dataType":"matrix","outputData":{"columns":5,"name":"a","rows":3,"type":"double","value":[["1","4","7","10","13"],["2","5","8","11","14"],["3","6","9","12","15"]]}}
 %---
-%[output:69e9f073]
-%   data: {"dataType":"matrix","outputData":{"columns":1,"name":"ex2","rows":3,"type":"double","value":[["1"],["2"],["3"]]}}
+%[output:065944be]
+%   data: {"dataType":"matrix","outputData":{"columns":1,"name":"b","rows":3,"type":"double","value":[["1"],["2"],["3"]]}}
 %---
-%[output:35f543c0]
+%[output:44f5c245]
 %   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"ans","value":"   1"}}
 %---
-%[output:993ff024]
+%[output:69f7740b]
 %   data: {"dataType":"tabular","outputData":{"columns":3,"header":"1×3 cell array","name":"args","rows":1,"type":"cell","value":[["3×5 double","[1;2;3]","[1,2,3,4,5]"]]}}
 %---
-%[output:1d167eab]
+%[output:9f68705c]
 %   data: {"dataType":"matrix","outputData":{"columns":15,"name":"map","rows":3,"type":"double","value":[["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"],["1","2","3","1","2","3","1","2","3","1","2","3","1","2","3"],["1","1","1","2","2","2","3","3","3","4","4","4","5","5","5"]]}}
 %---
-%[output:6e567960]
+%[output:2e1af278]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"name":"output_size","rows":1,"type":"double","value":[["3","5"]]}}
 %---
-%[output:448a089c]
+%[output:4131f9c9]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"name":"arg_sizes","rows":3,"type":"double","value":[["3","5"],["3","1"],["1","5"]]}}
 %---
-%[output:433af56c]
+%[output:58489d51]
 %   data: {"dataType":"matrix","outputData":{"columns":1,"name":"argument_element_counts","rows":3,"type":"double","value":[["15"],["3"],["5"]]}}
 %---
-%[output:2f472a92]
+%[output:90de6eb6]
 %   data: {"dataType":"matrix","outputData":{"columns":1,"name":"cumulative_offset","rows":3,"type":"double","value":[["15"],["18"],["23"]]}}
 %---
-%[output:7beb085e]
+%[output:842a0607]
 %   data: {"dataType":"matrix","outputData":{"columns":15,"name":"map","rows":3,"type":"double","value":[["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"],["16","17","18","16","17","18","16","17","18","16","17","18","16","17","18"],["19","19","19","20","20","20","21","21","21","22","22","22","23","23","23"]]}}
 %---
-%[output:7ffcc93a]
+%[output:7cc34f7e]
 %   data: {"dataType":"tabular","outputData":{"columns":23,"header":"1×23 cell array","name":"args","rows":1,"type":"cell","value":[["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","1","2","3","1","2","3","4","5"]]}}
 %---
-%[output:905e249b]
+%[output:80f9572a]
 %   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"ans","value":"   1"}}
 %---
