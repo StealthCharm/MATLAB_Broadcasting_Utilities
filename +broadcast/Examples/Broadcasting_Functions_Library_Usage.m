@@ -21,15 +21,15 @@ fcn = @plus;
 [map, sz, arg_sz] = broadcast.map(A, B);
 
 % Preallocate the output
-C = createArray(sz, output_class);
+output = createArray(sz, output_class);
 
 % Iterate through calls for each element of the output
 for n = 1:width(map)
-    C(n) = fcn(A(map(1, n)), B(map(2, n)));
+    output(n) = fcn(A(map(1, n)), B(map(2, n)));
 end
 
 % As expected this method of implementation works!
-isequal(A + B, C) %[output:7db720c9]
+isequal(A + B, output) %[output:7db720c9]
 %[text] ## Pattern 2: True Variadic Function Broadcasting
 %[text] Although less common there are times where the function call that we are broadcasting is variadic. In this case it is necessary for us to repackage the arguments to maintain a generalized working pattern, `broadcast.flatmap()` does this by modifying the arguments such that they reside in a flat heterogeneous array and the map is offset to account for this; conceptually one could picture this as a virtual, jagged dimension representing the argument count.
 % Example data
@@ -46,15 +46,15 @@ fcn = @add;
 [args, map, sz, arg_sz] = broadcast.flatmap(args{:});
 
 % Preallocate the output
-C = createArray(sz, output_class);
+output = createArray(sz, output_class);
 
 % Iterate through calls for each element of the output
 for n = 1:width(map)
-    C(n) = fcn(args{map(:, n)});
+    output(n) = fcn(args{map(:, n)});
 end
 
 % As expected this method of implementation works!
-isequal(A + B + C, C) %[output:134050fd]
+isequal(A + B + C, output) %[output:134050fd]
 %%
 %[text] # Additional Features
 %[text] For convenience some other functions have been included:
@@ -71,7 +71,7 @@ isequal(A + B + C, C) %[output:134050fd]
 %[text] Before discussing each function a general overview of broadcasting is valuable. The rules for broadcasting state that the length of arguments for any given dimension is allowed to have, at most, two values; in the event two unique values are present, one of them must be 1. 
 %[text] This gives use a convenient way to validate broadcast compatibility for arguments, and generating the output size of the result. To do this lets assume we have some arguments:
 % Allow example switching
-use_valid_arguments = false; %[control:checkbox:9ca5]{"position":[23,28]}
+use_valid_arguments = true; %[control:checkbox:9ca5]{"position":[23,27]}
 [A, B, C] = example_arguments(use_valid_arguments) %[output:590b7d7c] %[output:87fe0514] %[output:6095e61f]
 %[text] ### `element_size()`
 %[text] To gather the sizes and compare them we can align each arguments `size()` results in a row. This means that the size will be `NxM` where `N` is the number of operands and `M` is the dimension count of the highest dimension argument. This is difficult to do efficiently since we must find the size of each argument, but also ensure to pad the length of the size results to the highest dimension; in the example arguments this is an issue since `C` is three-dimensional. To normalize this pattern the private function `element_size()` was created, it takes in a cell array of the arguments and returns the flattened size matrix. Note that significant performance testing was conducted on the various methods of retrieving the sizes, of those methods, that used in `element_size()` consistently out performed all other methods.
@@ -95,16 +95,16 @@ is_valid_dimension = all(is_valid, 1) %[output:660767f3]
 % If we only care for general compatibility check we use complete reduction
 are_broadcast_compatible = all(is_valid, "all") %[output:65e283c8]
 %[text] Since the arguments are valid, this means broadcasting can be performed!
-output = attempt(@() A + B + C) %[output:6002b932]
+output = attempt(@() A + B + C) %[output:08bf27f8]
 %[text] If you would like to see this logic follow out with an invalid `C` argument, set the `use_valid_arguments` value to false, in live scripts this should be a check box, otherwise you can modify the value to false manually.
 %[text] ### broadcast.size()
 %[text] To encapsulate the workflow previously discussed, this namespace has `[sz, sizes] = broadcast.size().` This function returns the broadcasted output size along with the size matrix produced from `element_size()` (to avoid recalling it if the full size array is needed by `broadcast.size()`'s caller).
 %[text] In addition it also has a name-value options called `Validate`. This options allows the function to act as a validator when incompatible arguments are used; when called from within a function it will throw an error, as the calling function, using the same error that would be thrown by MATLAB when broadcasting incompatible arguments are used. When the `Validate` option is set to false, instead of producing an error the outputs are returned but the incompatible dimensions in the `output_size` are set to NaN, this acts as the incompatibility sentinel, allowing easy detection with `ismissing()`/`isnan().`
 % Using false we can gather the results and optionally perform more advanced handling/errors
-[output_size, arg_sizes] = broadcast.size(A, B, C, Validate=false)  %[output:1bd3239c] %[output:9b516cd9]
+[output_size, arg_sizes] = broadcast.size(A, B, C, Validate=false)  %[output:3626baff] %[output:3de10dee]
 
 % Or when using as a compositional tool, we have it throw an error as its caller, when called from a function
-[output_size, arg_sizes] = attempt(@() broadcast.size(A, B, C)) %[output:1a1d3834] %[output:2502b7d2]
+[output_size, arg_sizes] = attempt(@() broadcast.size(A, B, C)) %[output:9f4b5ce6] %[output:6cc641d4]
 %%
 %[text] ## Enabling Broadcasting
 %[text] Now that we understand how to check the compatibility of arguments for broadcasting, we can start to work towards an algorithm that enables us, as function authors, to implement broadcasting ourselves, in a consistent and low-overhead way. To do this we need to consider how code execution is working; MATLAB is a COW (copy on write) language this means that when you make a copy of a variable it behaves like a reference value until the copy or original are modified, once a modification occurs the modified version is copied and altered. MATLAB however does not employ a similar pattern for `repelem()` or `repmat()` which are used to replicate arrays. Another useful quirk about MATLAB is that, if an input argument to a function is used as its output, and that same pattern of `A = foo(A)` is used by the caller, MATLAB will overwrite the variable meaning we can avoid unnecessary allocations by modifying a variable instead of copying it.
@@ -258,7 +258,7 @@ end
 %   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"ans","value":"   1"}}
 %---
 %[output:134050fd]
-%   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"ans","value":"   0"}}
+%   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"ans","value":"   1"}}
 %---
 %[output:590b7d7c]
 %   data: {"dataType":"matrix","outputData":{"columns":5,"name":"A","rows":3,"type":"double","value":[["1","4","7","10","13"],["2","5","8","11","14"],["3","6","9","12","15"]]}}
@@ -267,37 +267,37 @@ end
 %   data: {"dataType":"matrix","outputData":{"columns":1,"name":"B","rows":3,"type":"double","value":[["1"],["2"],["3"]]}}
 %---
 %[output:6095e61f]
-%   data: {"dataType":"matrix","outputData":{"columns":3,"name":"C","rows":1,"type":"double","value":[["1","2","3"]]}}
+%   data: {"dataType":"matrix","outputData":{"columns":5,"name":"C","rows":1,"type":"double","value":[["1","2","3","4","5"]]}}
 %---
 %[output:0c2b27b3]
-%   data: {"dataType":"matrix","outputData":{"columns":2,"name":"arg_sizes","rows":3,"type":"double","value":[["3","5"],["3","1"],["1","3"]]}}
+%   data: {"dataType":"matrix","outputData":{"columns":2,"name":"arg_sizes","rows":3,"type":"double","value":[["3","5"],["3","1"],["1","5"]]}}
 %---
 %[output:16878b6d]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"name":"output_size","rows":1,"type":"double","value":[["3","5"]]}}
 %---
 %[output:8e8aca31]
-%   data: {"dataType":"matrix","outputData":{"columns":2,"header":"3×2 logical array","name":"is_valid","rows":3,"type":"logical","value":[["1","1"],["1","1"],["1","0"]]}}
+%   data: {"dataType":"matrix","outputData":{"columns":2,"header":"3×2 logical array","name":"is_valid","rows":3,"type":"logical","value":[["1","1"],["1","1"],["1","1"]]}}
 %---
 %[output:660767f3]
-%   data: {"dataType":"matrix","outputData":{"columns":2,"header":"1×2 logical array","name":"is_valid_dimension","rows":1,"type":"logical","value":[["1","0"]]}}
+%   data: {"dataType":"matrix","outputData":{"columns":2,"header":"1×2 logical array","name":"is_valid_dimension","rows":1,"type":"logical","value":[["1","1"]]}}
 %---
 %[output:65e283c8]
-%   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"are_broadcast_compatible","value":"   0"}}
+%   data: {"dataType":"textualVariable","outputData":{"header":"logical","name":"are_broadcast_compatible","value":"   1"}}
 %---
-%[output:6002b932]
-%   data: {"dataType":"textualVariable","outputData":{"name":"output","value":"  <a href=\"matlab:helpPopup('MException')\" style=\"font-weight:bold\">MException<\/a> with properties:\n\n    identifier: 'MATLAB:sizeDimensionsMustMatch'\n       message: 'Arrays have incompatible sizes for this operation.'\n         cause: {}\n         stack: [3×1 struct]\n    Correction: []"}}
+%[output:08bf27f8]
+%   data: {"dataType":"matrix","outputData":{"columns":5,"name":"output","rows":3,"type":"double","value":[["3","7","11","15","19"],["5","9","13","17","21"],["7","11","15","19","23"]]}}
 %---
-%[output:1bd3239c]
+%[output:3626baff]
 %   data: {"dataType":"matrix","outputData":{"columns":2,"name":"output_size","rows":1,"type":"double","value":[["3","5"]]}}
 %---
-%[output:9b516cd9]
-%   data: {"dataType":"matrix","outputData":{"columns":2,"name":"arg_sizes","rows":3,"type":"double","value":[["3","5"],["3","1"],["1","3"]]}}
+%[output:3de10dee]
+%   data: {"dataType":"matrix","outputData":{"columns":2,"name":"arg_sizes","rows":3,"type":"double","value":[["3","5"],["3","1"],["1","5"]]}}
 %---
-%[output:1a1d3834]
-%   data: {"dataType":"textualVariable","outputData":{"name":"output_size","value":"  <a href=\"matlab:helpPopup('MException')\" style=\"font-weight:bold\">MException<\/a> with properties:\n\n    identifier: 'MATLAB:sizeDimensionsMustMatch'\n       message: 'Arrays have incompatible sizes for this operation.'\n         cause: {}\n         stack: [3×1 struct]\n    Correction: []"}}
+%[output:9f4b5ce6]
+%   data: {"dataType":"matrix","outputData":{"columns":2,"name":"output_size","rows":1,"type":"double","value":[["3","5"]]}}
 %---
-%[output:2502b7d2]
-%   data: {"dataType":"text","outputData":{"text":"arg_sizes =\n     []\n","truncated":false}}
+%[output:6cc641d4]
+%   data: {"dataType":"matrix","outputData":{"columns":2,"name":"arg_sizes","rows":3,"type":"double","value":[["3","5"],["3","1"],["1","5"]]}}
 %---
 %[output:182c3b46]
 %   data: {"dataType":"matrix","outputData":{"columns":15,"name":"map","rows":3,"type":"double","value":[["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"],["1","2","3","1","2","3","1","2","3","1","2","3","1","2","3"],["1","1","1","2","2","2","3","3","3","4","4","4","5","5","5"]]}}
